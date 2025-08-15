@@ -129,7 +129,7 @@
         }
 
         .timeline-container.single-shift-view {
-             overflow-x: hidden;
+             overflow-x: auto;
         }
 
         .shift-section.shift-full-width {
@@ -830,6 +830,49 @@
                 overflow: visible;
             }
         }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .header h1 {
+                font-size: 1.5em;
+                margin-bottom: 10px;
+            }
+
+            .tabs {
+                flex-wrap: wrap;
+            }
+
+            .timeline-toolbar {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .equipment-label {
+                font-size: 0.9em;
+                padding: 8px;
+                min-width: 80px !important; /* Override the JS calculated width */
+                max-width: 100px;
+                white-space: normal;
+                text-align: center;
+            }
+
+            .shift-header {
+                font-size: 10px;
+                padding: 2px;
+            }
+
+            .time-block {
+                height: 45px; /* a bit taller for easier tapping */
+            }
+
+            .time-slot.hour-mark {
+                font-size: 9px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1111,7 +1154,7 @@
         let bookings = [];
         let equipmentSystemRelations = [];
         let systemDetails = [];
-        let equipmentList = [];
+        let equipmentList = ['Haul Truck', 'Excavator', 'Drill Rig', 'Dozer', 'Grader', 'Water Truck', 'Loader'];
         let systemTypes = ['Conveyor', 'Pump', 'Pipe', 'Motor', 'Valve', 'Sensor'];
         let faultTypes = ['Trip', 'Power Failure', 'Run Skew', 'Conveyor Torn', 'Rollers Damaged', 'Leakage', 'Blockage', 'Wear', 'Failure', 'Scheduled Maintenance'];
         let sections = [
