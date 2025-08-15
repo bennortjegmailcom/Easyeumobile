@@ -1,0 +1,2835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equipment Utilization Tracker</title>
+    <script id="app-data" type="application/json"></script>
+    <style>
+        :root {
+            --scrollbar-track: #f5f5f5;
+            --scrollbar-thumb: #c1c1c1;
+            --scrollbar-thumb-hover: #a8a8a8;
+            --mechanical: #FF9AA2;
+            --electrical: #FFB7B2;
+            --operations: #FFDAC1;
+            --technicians: #E2F0CB;
+            --instrumentation: #B5EAD7;
+            --management: #C7CEEA;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        /* --- Custom Scrollbar Styles --- */
+        /* For Firefox */
+        * {
+            scrollbar-width: auto;
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+        }
+
+        /* For Chrome, Safari, and Edge */
+        ::-webkit-scrollbar {
+            width: 18px;
+            height: 18px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--scrollbar-track);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background-color: var(--scrollbar-thumb);
+            border-radius: 10px;
+            border: 3px solid var(--scrollbar-track);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: var(--scrollbar-thumb-hover);
+        }
+
+        html {
+            scrollbar-gutter: stable;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .selection-info {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            display: none;
+            z-index: 100;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #2c3e50;
+            color: white;
+            border-radius: 5px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab {
+            padding: 8px 15px;
+            background-color: #34495e;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .tab.active {
+            background-color: #1abc9c;
+        }
+        
+        .view {
+            display: none;
+        }
+        
+        .view.active {
+            display: block;
+        }
+
+        .timeline-toolbar {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #timeline-view-select {
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        .shift-hidden {
+            display: none !important;
+        }
+
+        .timeline-container.single-shift-view {
+             overflow-x: hidden;
+        }
+
+        .shift-section.shift-full-width {
+            width: 100%;
+        }
+
+        .timeline-container {
+            overflow-x: auto;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 15px;
+        }
+
+        .equipment-rows {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .equipment-row {
+            display: flex;
+            min-height: 60px;
+            border-bottom: 1px solid #eee;
+            align-items: stretch;
+        }
+
+        .equipment-label {
+            padding: 10px;
+            font-weight: bold;
+            background-color: #ecf0f1;
+            display: flex;
+            align-items: center;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+        }
+
+        .shift-section {
+            display: flex;
+            flex-direction: column;
+            border-right: 2px solid #bdc3c7;
+            flex: 1;
+        }
+
+        .shift-header {
+            font-weight: bold;
+            padding: 3px 5px;
+            background-color: #34495e;
+            color: white;
+            text-align: center;
+            font-size: 11px;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .time-header {
+            display: flex;
+            background-color: #ecf0f1;
+            font-size: 8px;
+            min-height: 15px;
+        }
+
+        .time-slot {
+            text-align: center;
+            padding: 0;
+            border-right: 1px solid #eee;
+            font-size: 7px;
+            position: relative;
+            box-sizing: border-box;
+            flex: 1;
+        }
+
+        .time-slot.hour-mark {
+            border-left: 2px solid #333;
+            font-weight: bold;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            background-color: #f8f9fa;
+        }
+
+        .time-blocks {
+            display: flex;
+            position: relative;
+        }
+
+        .time-block {
+            height: 40px;
+            border-right: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            box-sizing: border-box;
+            flex: 1;
+        }
+
+        .time-block:hover {
+            background-color: #f0f0f0;
+        }
+
+        .time-block.selected {
+            background-color: #3498db;
+        }
+
+
+        .time-block.booked {
+            opacity: 0.7;
+        }
+
+        .booking-summary {
+            position: absolute;
+            height: 40px;
+            z-index: 5;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 4px;
+            overflow: hidden;
+            white-space: normal;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            border: 1px solid rgba(0,0,0,0.2);
+            border-radius: 3px;
+            box-sizing: border-box;
+            cursor: pointer;
+            transition: filter 0.2s ease;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            line-height: 1.15;
+        }
+
+        .booking-summary:hover {
+            filter: brightness(1.2);
+        }
+
+        .booking-summary-title {
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .booking-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            z-index: 1000;
+            width: 400px;
+            max-width: 90%;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .system-icons {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+
+        .system-icon {
+            padding: 10px 15px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 2px solid #ddd;
+            background-color: #f8f9fa;
+        }
+
+        .system-icon.selected {
+            border-color: #3498db;
+            background-color: #eaf5ff;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background-color: #2980b9;
+        }
+
+        .btn-secondary {
+            background-color: #95a5a6;
+            color: white;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background-color: #7f8c8d;
+        }
+
+        .btn-danger {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+        
+        .admin-panel {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 15px;
+        }
+
+        .color-indicator {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        
+        .admin-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+
+        .admin-tab {
+            padding: 8px 15px;
+            background-color: #ecf0f1;
+            border-radius: 5px 5px 0 0;
+            cursor: pointer;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+
+        .admin-tab.active {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .admin-view { display: none; }
+        .admin-view.active { display: block; }
+
+        .admin-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .admin-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .admin-section h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .admin-section h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #34495e;
+        }
+
+        .admin-grid-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .admin-grid-left, .admin-grid-right {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .relations-stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .stat-label {
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+
+        .relations-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .search-filter {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .search-input, .filter-select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .search-input {
+            width: 200px;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .relations-grid {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .relations-grid-header {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr 1fr 2fr 120px;
+            background-color: #34495e;
+            color: white;
+        }
+
+        .grid-header-cell {
+            padding: 15px;
+            font-weight: bold;
+            border-right: 1px solid #2c3e50;
+        }
+
+        .relations-grid-body {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .relation-grid-row {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr 1fr 2fr 120px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+
+        .relation-grid-row:hover {
+            background-color: #f8f9fa;
+        }
+
+        .grid-cell {
+            padding: 15px;
+            border-right: 1px solid #eee;
+            display: flex;
+            align-items: center;
+        }
+
+        .no-relations {
+            padding: 40px;
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+
+        .builder-form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .systems-builder, .faults-builder {
+            margin-bottom: 25px;
+        }
+
+        .systems-grid, .faults-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .system-item, .fault-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+
+        .system-item input, .fault-item input {
+            margin: 0;
+        }
+
+        .custom-system, .custom-fault {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .custom-system input, .custom-fault input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .builder-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .builder-preview {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            height: fit-content;
+        }
+
+        .builder-preview h4 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .preview-content {
+            line-height: 1.6;
+        }
+
+        .preview-item {
+            margin-bottom: 10px;
+        }
+
+        .preview-label {
+            font-weight: bold;
+            color: #34495e;
+        }
+
+        .preview-value {
+            color: #2c3e50;
+        }
+
+        .relation-actions-grid {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .btn-grid {
+            padding: 8px 12px;
+            font-size: 14px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .btn-edit-grid {
+            background-color: #f39c12;
+            color: white;
+        }
+
+        .btn-delete-grid {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .btn-edit-grid:hover { background-color: #d35400; }
+        .btn-delete-grid:hover { background-color: #c0392b; }
+
+        .equipment-badge {
+            background-color: #3498db;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .section-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .systems-list, .faults-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .system-tag, .fault-tag {
+            background-color: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 11px;
+            color: #2c3e50;
+        }
+
+        .admin-list-container {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: white;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        .admin-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            gap: 10px;
+        }
+
+        .admin-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .admin-item-name {
+            font-weight: bold;
+            flex-grow: 1;
+        }
+
+        .admin-item-input {
+            flex-grow: 1;
+            border: 1px solid #3498db;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 14px;
+        }
+
+        .admin-item-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .add-item-form {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            align-items: center;
+        }
+        
+        /* Compiler Styles */
+        .compiler-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            min-height: 60vh;
+        }
+        
+        .compiler-input-section, .compiler-output-section {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #compiler-input {
+            flex-grow: 1;
+            width: 98%;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+        }
+        
+        #compiler-output-preview {
+            flex-grow: 1;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+
+        #compiler-actions {
+            margin-top: 10px;
+            display: none;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        #compiler-status {
+            margin-top: 10px;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+
+        @media print {
+            body > .container > :not(#meeting),
+            #meeting > :not(.timeline-container) {
+                display: none;
+            }
+
+            #meeting, #meeting-timeline {
+                display: block !important;
+                box-shadow: none;
+                border: none;
+                padding: 0;
+                margin: 0;
+            }
+
+            .timeline-container {
+                overflow: visible;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="selection-info" id="selection-info">
+            <div>Equipment: <span id="selected-equipment"></span></div>
+            <div>Start: <span id="start-time"></span></div>
+            <div>End: <span id="end-time"></span></div>
+        </div>
+
+        <div class="header">
+            <h1>Equipment Utilization Tracker</h1>
+            <div class="tabs">
+                <div class="tab active" data-tab="tracker">Tracker</div>
+                <div class="tab" data-tab="meeting">Meeting View</div>
+                <div class="tab" data-tab="admin">Admin</div>
+            </div>
+        </div>
+
+        <div id="tracker" class="view active">
+            <div class="timeline-toolbar">
+                <label for="timeline-view-select">View:</label>
+                <select id="timeline-view-select">
+                    <option value="24h" selected>24 Hour View</option>
+                    <option value="day">Day Shift (06-18)</option>
+                    <option value="night">Night Shift (18-06)</option>
+                </select>
+            </div>
+            <div class="timeline-container">
+                <div class="equipment-rows" id="equipment-rows"></div>
+            </div>
+        </div>
+
+        <div id="meeting" class="view">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">Morning Meeting Overview</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-secondary" id="export-txt-btn">Export as TXT</button>
+                    <button class="btn-secondary" id="print-btn">Print</button>
+                    <button class="btn-danger" id="clear-all-btn">Clear All</button>
+                </div>
+            </div>
+            <div class="timeline-container" style="box-shadow: none; border: 1px solid #ddd;">
+                <div id="meeting-timeline">
+                    <!-- This will be populated by JS -->
+                </div>
+            </div>
+        </div>
+        
+        <div id="admin" class="view admin-panel">
+            <h2>Admin Panel</h2>
+             <div class="admin-tabs">
+                <div class="admin-tab active" data-admin-tab="manager">Relations Manager</div>
+                <div class="admin-tab" data-admin-tab="builder">Data & Builder</div>
+            </div>
+
+            <div id="admin-manager-view" class="admin-view active">
+                <div class="admin-section">
+                    <h3>Relations Manager</h3>
+                    
+                    <div class="relations-stats">
+                        <div class="stat-card">
+                            <div class="stat-number" id="total-relations">0</div>
+                            <div class="stat-label">Total Relations</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="total-equipment">7</div>
+                            <div class="stat-label">Equipment Items</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="total-sections">6</div>
+                            <div class="stat-label">Sections</div>
+                        </div>
+                    </div>
+
+                    <div class="relations-toolbar">
+                        <div class="search-filter">
+                            <input type="text" id="search-relations" placeholder="Search relations..." class="search-input">
+                            <select id="filter-equipment" class="filter-select">
+                                <option value="">All Equipment</option>
+                            </select>
+                            <select id="filter-section" class="filter-select">
+                                <option value="">All Sections</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-actions">
+                            <button id="save-data-btn" class="btn-primary">Save Data to File</button>
+                            <button id="export-relations-btn" class="btn-secondary">Export</button>
+                            <button id="import-relations-btn" class="btn-primary">Import</button>
+                            <button id="add-new-relation-btn" class="btn-primary">Add New</button>
+                        </div>
+                    </div>
+
+                    <h4 style="margin-top: 20px;">Equipment ➞ System Relations</h4>
+                    <div class="relations-grid" id="equipment-system-relations-grid">
+                        <div class="relations-grid-header" style="grid-template-columns: 1fr 3fr 120px;">
+                            <div class="grid-header-cell">Equipment</div>
+                            <div class="grid-header-cell">Systems</div>
+                            <div class="grid-header-cell">Actions</div>
+                        </div>
+                        <div class="relations-grid-body" id="equipment-system-relations-grid-body">
+                            <!-- populated by JS -->
+                        </div>
+                    </div>
+
+                    <h4 style="margin-top: 30px;">System ➞ Details Relations</h4>
+                    <div class="relations-grid" id="system-details-relations-grid">
+                        <div class="relations-grid-header" style="grid-template-columns: 1fr 1fr 2fr 120px;">
+                            <div class="grid-header-cell">System</div>
+                            <div class="grid-header-cell">Section</div>
+                            <div class="grid-header-cell">Faults</div>
+                            <div class="grid-header-cell">Actions</div>
+                        </div>
+                        <div class="relations-grid-body" id="system-details-relations-grid-body">
+                            <!-- populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="admin-builder-view" class="admin-view">
+                <div class="admin-grid-layout">
+                    <div class="admin-grid-left">
+                        <div class="admin-section">
+                            <h3>Data Manager</h3>
+                            
+                            <h4>Equipment Management</h4>
+                            <div class="admin-list-container" id="admin-equipment-list"></div>
+                            <div class="add-item-form">
+                                <textarea id="new-equipment-name" placeholder="Enter a comma-separated list of equipment..." class="search-input" rows="3"></textarea>
+                                <button id="add-equipment-btn" class="btn-primary">Add Equipment</button>
+                            </div>
+                        
+                            <h4 style="margin-top: 20px;">System Types Management</h4>
+                            <div class="admin-list-container" id="admin-systems-list"></div>
+                            <div class="add-item-form">
+                                <textarea id="new-system-name" placeholder="Enter a comma-separated list of system types..." class="search-input" rows="3"></textarea>
+                                <button id="add-system-btn" class="btn-primary">Add System</button>
+                            </div>
+                        
+                            <h4 style="margin-top: 20px;">Fault Types Management</h4>
+                            <div class="admin-list-container" id="admin-faults-list"></div>
+                            <div class="add-item-form">
+                                <textarea id="new-fault-name" placeholder="Enter a comma-separated list of fault types..." class="search-input" rows="3"></textarea>
+                                <button id="add-fault-btn" class="btn-primary">Add Fault</button>
+                            </div>
+
+                            <h4 style="margin-top: 20px;">Section Management</h4>
+                            <div class="admin-list-container" id="admin-sections-list"></div>
+                            <div class="add-item-form">
+                                <input type="text" id="new-section-name" placeholder="New section name" class="search-input">
+                                <input type="color" id="new-section-color" value="#C7CEEA" style="padding: 2px; height: 30px;">
+                                <button id="add-section-btn" class="btn-primary">Add Section</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="admin-grid-right">
+                         <div class="admin-section">
+                            <h3>Relations Builder</h3>
+                            <div id="builder-form-container">
+                                <div class="builder-form">
+                                    <div class="form-group">
+                                        <label for="builder-relation-type">Relation Type</label>
+                                        <select id="builder-relation-type" class="filter-select">
+                                            <option value="equipment-to-systems">Equipment ➞ Systems</option>
+                                            <option value="system-to-details">System ➞ Details</option>
+                                        </select>
+                                    </div>
+
+                                    <div id="builder-form-equipment-to-systems">
+                                        <div class="form-group">
+                                            <label for="builder-equipment">Equipment</label>
+                                            <select id="builder-equipment">
+                                                <option value="">Select Equipment</option>
+                                            </select>
+                                        </div>
+                                        <div class="systems-builder">
+                                            <label>System Types</label>
+                                            <div class="systems-grid">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                            <div class="custom-system">
+                                                <input type="text" id="custom-system" placeholder="Add custom system type">
+                                                <button type="button" id="add-custom-system-btn">Add</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="builder-form-system-to-details" style="display: none;">
+                                        <div class="form-group">
+                                            <label for="builder-system-type">System Type</label>
+                                            <select id="builder-system-type">
+                                                <option value="">Select System Type</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="builder-section">Responsible Section</label>
+                                            <select id="builder-section">
+                                                <option value="">Select Section</option>
+                                            </select>
+                                        </div>
+                                        <div class="faults-builder">
+                                            <label>Fault Types</label>
+                                            <div class="faults-grid">
+                                                <!-- Populated by JS -->
+                                            </div>
+                                            <div class="custom-fault">
+                                                <input type="text" id="custom-fault" placeholder="Add custom fault type">
+                                                <button type="button" id="add-custom-fault-btn">Add</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="builder-actions">
+                                        <button id="clear-builder-btn" class="btn-secondary">Clear</button>
+                                        <button id="save-relation-btn" class="btn-primary">Save Relation</button>
+                                    </div>
+                                </div>
+        
+                                <div class="builder-preview">
+                                    <h4>Preview</h4>
+                                    <div class="preview-content" id="builder-preview-content">
+                                        <p>Select equipment and configuration to see preview</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="modal-overlay"></div>
+        <div class="booking-modal" id="booking-modal">
+            <h3 id="booking-modal-title">Add Equipment Booking</h3>
+            <div class="form-group">
+                <label>Equipment</label>
+                <select id="equipment-select" class="equipment-select">
+                    <option value="">Select Equipment</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>System Type</label>
+                <div class="system-icons">
+                    <!-- Populated based on relations -->
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Responsible Section</label>
+                <select id="section-select">
+                    <option value="">Select Section</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Fault Type</label>
+                <select id="fault-select">
+                    <option value="">Select Fault</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Comments (max 20 words)</label>
+                <textarea id="comments" rows="3" maxlength="100"></textarea>
+            </div>
+
+            <div class="button-group">
+                <button id="cancel-booking-btn" class="btn-secondary">Cancel</button>
+                <button id="save-booking-btn" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+    
+        // --- MASTER DATA ---
+        let bookings = [];
+        let equipmentSystemRelations = [];
+        let systemDetails = [];
+        let equipmentList = [];
+        let systemTypes = ['Conveyor', 'Pump', 'Pipe', 'Motor', 'Valve', 'Sensor'];
+        let faultTypes = ['Trip', 'Power Failure', 'Run Skew', 'Conveyor Torn', 'Rollers Damaged', 'Leakage', 'Blockage', 'Wear', 'Failure', 'Scheduled Maintenance'];
+        let sections = [
+            { name: 'mechanical', color: '#FF9AA2' },
+            { name: 'electrical', color: '#FFB7B2' },
+            { name: 'operations', color: '#FFDAC1' },
+            { name: 'technicians', color: '#E2F0CB' },
+            { name: 'instrumentation', color: '#B5EAD7' },
+            { name: 'management', color: '#C7CEEA' }
+        ];
+
+
+        // --- GLOBAL STATE ---
+        let selectedTimeBlocks = [];
+        let selectedSystem = '';
+        let activeEdit = null;
+        let timelineView = '24h';
+
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- APP INITIALIZATION ---
+            // The following steps ensure the app starts correctly and robustly.
+            
+            // 1. Setup all event listeners immediately to make the UI responsive.
+            // This is critical for ensuring buttons and interactions work right away.
+            setupEventListeners();
+            
+            // 2. Load any saved data from the HTML file itself.
+            loadDataFromHtml();
+
+            // 3. Render all application components with the loaded or default data.
+            createTimelineGrid('equipment-rows', true);
+            renderBookingsOnTracker();
+            populateAllEquipmentDropdowns();
+            populateSectionDropdowns();
+            populateBuilderSystemTypeDropdown();
+            populateBuilderGrids();
+            renderAllAdminLists();
+            resetModalFilters();
+            updateRelationsGrid();
+            updateRelationsStats();
+
+            // 4. Show the default starting tab.
+            showTab('tracker');
+        });
+
+        // --- EVENT HANDLING ---
+        function setupEventListeners() {
+            document.addEventListener('mouseup', endSelection);
+            
+            // Main Tabs
+            document.getElementById('timeline-view-select').addEventListener('change', updateTimelineView);
+            document.querySelector('.tabs').addEventListener('click', (e) => {
+                if (e.target.classList.contains('tab')) {
+                    const tabName = e.target.dataset.tab;
+                    if (tabName === 'admin') {
+                        const password = prompt("Enter admin password:");
+                        if (password === "1234") {
+                            showTab(tabName);
+                        } else {
+                            alert("Incorrect password.");
+                        }
+                    } else {
+                        showTab(tabName);
+                    }
+                }
+            });
+            
+            // Admin Tabs
+            document.querySelector('.admin-tabs').addEventListener('click', (e) => {
+                if(e.target.classList.contains('admin-tab')) {
+                    showAdminTab(e.target.dataset.adminTab);
+                }
+            });
+            
+            // Booking Modal
+            document.getElementById('equipment-select').addEventListener('change', (e) => updateModalBasedOnEquipment(e.target.value));
+            document.getElementById('cancel-booking-btn').addEventListener('click', closeModal);
+            document.getElementById('save-booking-btn').addEventListener('click', saveBooking);
+            document.getElementById('section-select').addEventListener('change', (e) => updateFaultsBasedOnSection(e.target.value));
+            document.querySelector('.system-icons').addEventListener('click', (e) => {
+                if (e.target.classList.contains('system-icon')) {
+                    selectSystem(e.target, e.target.dataset.system);
+                }
+            });
+
+            // Meeting View
+            document.getElementById('export-txt-btn').addEventListener('click', exportMeetingViewAsTxt);
+            document.getElementById('print-btn').addEventListener('click', () => window.print());
+            document.getElementById('clear-all-btn').addEventListener('click', clearAllBookings);
+
+            // Admin: Relations Manager
+            document.getElementById('search-relations').addEventListener('input', updateRelationsGrid);
+            document.getElementById('filter-equipment').addEventListener('change', updateRelationsGrid);
+            document.getElementById('filter-section').addEventListener('change', updateRelationsGrid);
+            document.getElementById('save-data-btn').addEventListener('click', saveDataToHtml);
+            document.getElementById('export-relations-btn').addEventListener('click', exportData);
+            document.getElementById('import-relations-btn').addEventListener('click', importData);
+            document.getElementById('add-new-relation-btn').addEventListener('click', addNewRelation);
+            
+            // Admin: Data Manager
+            document.getElementById('add-equipment-btn').addEventListener('click', addEquipmentItem);
+            document.getElementById('add-system-btn').addEventListener('click', addSystemType);
+            document.getElementById('add-fault-btn').addEventListener('click', addFaultType);
+            document.getElementById('add-section-btn').addEventListener('click', addSection);
+            document.getElementById('admin-equipment-list').addEventListener('click', e => handleAdminListClick(e, 'equipment', 'deleteEquipmentItem'));
+            document.getElementById('admin-systems-list').addEventListener('click', e => handleAdminListClick(e, 'system', 'deleteSystemType'));
+            document.getElementById('admin-faults-list').addEventListener('click', e => handleAdminListClick(e, 'fault', 'deleteFaultType'));
+            document.getElementById('admin-sections-list').addEventListener('click', e => handleAdminListClick(e, 'section', 'deleteSection'));
+
+            // Admin: Builder
+            document.getElementById('builder-relation-type').addEventListener('change', switchBuilderForm);
+            document.getElementById('builder-equipment').addEventListener('change', updateBuilderPreview);
+            document.getElementById('builder-system-type').addEventListener('change', updateBuilderPreview);
+            document.getElementById('builder-section').addEventListener('change', updateBuilderPreview);
+            document.querySelector('.systems-grid').addEventListener('change', updateBuilderPreview);
+            document.querySelector('.faults-grid').addEventListener('change', updateBuilderPreview);
+            document.getElementById('add-custom-system-btn').addEventListener('click', addCustomSystem);
+            document.getElementById('add-custom-fault-btn').addEventListener('click', addCustomFault);
+            document.getElementById('clear-builder-btn').addEventListener('click', clearBuilder);
+            document.getElementById('save-relation-btn').addEventListener('click', saveBuilderRelation);
+        }
+        
+        function handleAdminListClick(event, type, deleteFnName) {
+            const button = event.target.closest('button');
+            if (!button) return;
+
+            const itemElement = event.target.closest('.admin-list-item');
+            const index = Array.from(itemElement.parentNode.children).indexOf(itemElement);
+
+            if (button.dataset.action === 'edit') {
+                startEditItem(type, index);
+            } else if (button.dataset.action === 'delete') {
+                if (type === 'section') {
+                    deleteSection(index);
+                    return;
+                }
+                const deleteFunctions = {
+                    deleteEquipmentItem: deleteEquipmentItem,
+                    deleteSystemType: deleteSystemType,
+                    deleteFaultType: deleteFaultType,
+                };
+                deleteFunctions[deleteFnName](index);
+            } else if (button.dataset.action === 'save') {
+                saveItem(type, index);
+            } else if (button.dataset.action === 'cancel') {
+                cancelEdit();
+            }
+        }
+
+
+        // --- DATA PERSISTENCE ---
+        function saveDataToHtml() {
+            const dataToSave = {
+                bookings,
+                equipmentSystemRelations,
+                systemDetails,
+                equipmentList,
+                systemTypes,
+                faultTypes,
+                sections
+            };
+
+            const dataString = JSON.stringify(dataToSave, null, 2);
+
+            // Create a temporary DOM to manipulate the HTML string
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = document.documentElement.outerHTML;
+
+            const dataScript = tempDiv.querySelector('#app-data');
+            if (dataScript) {
+                dataScript.textContent = dataString;
+            } else {
+                alert("Error: Could not find the data script tag. Cannot save.");
+                return;
+            }
+
+            const newHtml = tempDiv.innerHTML;
+            const blob = new Blob([newHtml], { type: 'text/html' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'index.html';
+            link.click();
+            URL.revokeObjectURL(link.href);
+
+            alert("File download initiated. Please save the new HTML file, replacing your old one.");
+        }
+
+        function loadDataFromHtml() {
+            const dataScript = document.getElementById('app-data');
+            if (dataScript && dataScript.textContent.trim()) {
+                try {
+                    const data = JSON.parse(dataScript.textContent);
+                    applyData(data);
+                    console.log("Data loaded from HTML.");
+                } catch (e) {
+                    console.error("Error parsing data from HTML script tag", e);
+                    alert("Error: Could not load data embedded in the HTML file. It might be corrupted.");
+                }
+            } else {
+                console.log("No data found in HTML, using default data.");
+            }
+        }
+
+
+        // --- UI POPULATION & RENDERING ---
+        function createTimelineGrid(containerId, isInteractive) {
+            const equipmentRowsContainer = document.getElementById(containerId);
+            equipmentRowsContainer.innerHTML = '';
+            
+            equipmentList.forEach(equipment => {
+                const row = createEquipmentRow(equipment, isInteractive);
+                equipmentRowsContainer.appendChild(row);
+            });
+            
+            // After creating the grid, render bookings on it
+            renderBookings(containerId);
+            setEquipmentLabelWidth();
+        }
+        
+        function renderBookings(containerId) {
+             const container = document.getElementById(containerId);
+             if (!container) return;
+
+             // Clear existing booking visuals from this container
+             container.querySelectorAll('.time-block.booked').forEach(b => {
+                 b.classList.remove('booked');
+                 b.style.backgroundColor = '';
+                 delete b.dataset.bookingId;
+             });
+             container.querySelectorAll('.booking-summary').forEach(s => s.remove());
+
+
+             bookings.forEach(booking => {
+                 const equipmentRow = container.querySelector(`[data-equipment="${booking.equipment}"]`);
+                 if (!equipmentRow) return;
+
+                 const shiftSection = booking.shift === 'day' 
+                     ? equipmentRow.nextElementSibling 
+                     : equipmentRow.nextElementSibling.nextElementSibling;
+                 
+                 const timeBlocksContainer = shiftSection?.querySelector('.time-blocks');
+                 if (!timeBlocksContainer) return;
+                 
+                 // Render for tracker view (individual blocks)
+                 if (containerId === 'equipment-rows') {
+                     booking.timeBlocks.forEach(bInfo => {
+                         const block = timeBlocksContainer.querySelector(`[data-index='${bInfo.index}']`);
+                         if (block) {
+                             block.classList.add('booked');
+                             block.dataset.bookingId = booking.id;
+                             block.style.backgroundColor = getSectionColor(booking.section);
+                         }
+                     });
+                 }
+
+                 // Render for meeting view (summary bar)
+                 if (containerId === 'meeting-equipment-rows') {
+                     renderBookingSummary(booking, timeBlocksContainer);
+                 }
+             });
+        }
+        
+        function renderBookingsOnTracker() {
+            renderBookings('equipment-rows');
+        }
+
+        function setEquipmentLabelWidth() {
+            const labels = document.querySelectorAll('.equipment-label');
+            if (labels.length === 0) return;
+
+            let maxWidth = 0;
+            // Reset width to auto to measure natural width
+            labels.forEach(label => {
+                label.style.minWidth = 'auto';
+                label.style.width = 'auto';
+            });
+
+            // Find the maximum width
+            labels.forEach(label => {
+                const width = label.offsetWidth;
+                if (width > maxWidth) {
+                    maxWidth = width;
+                }
+            });
+
+            // Apply the max width to all labels
+            labels.forEach(label => {
+                label.style.minWidth = `${maxWidth}px`;
+            });
+        }
+
+        function createEquipmentRow(name, isInteractive) {
+            const rowContainer = document.createElement('div');
+            rowContainer.className = 'equipment-row';
+
+            const label = document.createElement('div');
+            label.className = 'equipment-label';
+            label.textContent = name;
+            label.dataset.equipment = name.toLowerCase().replace(/\s+/g, '-');
+            rowContainer.appendChild(label);
+
+            const daySection = createShiftSection('Day Shift (6:00-18:00)', 6, 18, name, isInteractive, 'day');
+            rowContainer.appendChild(daySection);
+
+            const nightSection = createShiftSection('Night Shift (18:00-6:00)', 18, 30, name, isInteractive, 'night');
+            rowContainer.appendChild(nightSection);
+
+            return rowContainer;
+        }
+
+        function createShiftSection(shiftTitle, startHour, endHour, equipment, isInteractive, shiftType) {
+            const section = document.createElement('div');
+            section.className = 'shift-section';
+            section.dataset.shift = shiftType;
+
+            const header = document.createElement('div');
+            header.className = 'shift-header';
+            header.textContent = shiftTitle;
+            section.appendChild(header);
+
+            const timeHeader = document.createElement('div');
+            timeHeader.className = 'time-header';
+            
+            const timeBlocks = document.createElement('div');
+            timeBlocks.className = 'time-blocks';
+
+            let blockIndex = 0;
+            for (let hour = startHour; hour < startHour + 12; hour++) {
+                const actualHour = hour >= 24 ? hour - 24 : hour;
+                for (let minute = 0; minute < 60; minute += 5) {
+                    const timeSlot = document.createElement('div');
+                    timeSlot.className = 'time-slot';
+                    if (minute === 0) {
+                        timeSlot.textContent = `${actualHour.toString().padStart(2, '0')}:00`;
+                        timeSlot.classList.add('hour-mark');
+                    }
+                    timeHeader.appendChild(timeSlot);
+                    
+                    const block = document.createElement('div');
+                    block.className = 'time-block';
+                    
+                    block.dataset.index = blockIndex;
+                    block.dataset.time = `${actualHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                    block.title = block.dataset.time;
+                    block.dataset.equipment = equipment.toLowerCase().replace(/\s+/g, '-');
+                    
+                    if (isInteractive) {
+                        block.addEventListener('mousedown', startSelection);
+                        block.addEventListener('mouseenter', extendSelection);
+                    } else {
+                        block.style.cursor = 'default';
+                    }
+
+                    timeBlocks.appendChild(block);
+                    blockIndex++;
+                }
+            }
+            section.appendChild(timeHeader);
+            section.appendChild(timeBlocks);
+            return section;
+        }
+
+        function populateEquipmentDropdown(selectElementId) {
+            const select = document.getElementById(selectElementId);
+            if (!select) return;
+            const currentValue = select.value;
+            const hasAllOption = select.querySelector('option[value=""]')?.textContent.toLowerCase().includes('all');
+            select.innerHTML = hasAllOption ? '<option value="">All Equipment</option>' : '<option value="">Select Equipment</option>';
+            
+            equipmentList.forEach(name => {
+                const value = name.toLowerCase().replace(/\s+/g, '-');
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = name;
+                select.appendChild(option);
+            });
+            if (Array.from(select.options).some(o => o.value === currentValue)) {
+                select.value = currentValue;
+            }
+        }
+        
+        function populateSectionDropdowns() {
+            const sectionSelects = document.querySelectorAll('#filter-section, #builder-section, #section-select');
+            sectionSelects.forEach(select => {
+                const currentValue = select.value;
+                const hasAllOption = select.id === 'filter-section';
+                select.innerHTML = hasAllOption ? '<option value="">All Sections</option>' : '<option value="">Select Section</option>';
+                sections.forEach(sec => {
+                    const option = document.createElement('option');
+                    option.value = sec.name;
+                    option.textContent = sec.name.charAt(0).toUpperCase() + sec.name.slice(1);
+                    select.appendChild(option);
+                });
+                if (Array.from(select.options).some(o => o.value === currentValue)) {
+                    select.value = currentValue;
+                }
+            });
+        }
+
+        function populateAllEquipmentDropdowns() {
+            populateEquipmentDropdown('equipment-select');
+            populateEquipmentDropdown('builder-equipment');
+            populateEquipmentDropdown('filter-equipment');
+        }
+
+        function populateBuilderGrids() {
+            const createGridItems = (container, items, prefix) => {
+                container.innerHTML = '';
+                items.forEach(item => {
+                    const id = `${prefix}-${item.toLowerCase().replace(/\s+/g, '-')}`;
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = `${prefix}-item`;
+                    itemDiv.innerHTML = `<input type="checkbox" id="${id}" value="${item}"><label for="${id}">${item}</label>`;
+                    container.appendChild(itemDiv);
+                });
+            };
+            createGridItems(document.querySelector('.systems-grid'), systemTypes, 'sys');
+            createGridItems(document.querySelector('.faults-grid'), faultTypes, 'fault');
+        }
+
+        function renderAllAdminLists() {
+            renderEquipmentAdminList();
+            renderSystemsAdminList();
+            renderFaultsAdminList();
+            renderSectionsAdminList();
+        }
+
+        function renderAdminList(containerId, items, type, deleteFnName) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            if (items.length === 0) {
+                container.innerHTML = '<p style="padding: 10px; color: #7f8c8d;">No items yet.</p>';
+                return;
+            }
+            items.forEach((item, index) => {
+                const listItem = document.createElement('div');
+                listItem.className = 'admin-list-item';
+
+                if (activeEdit && activeEdit.type === type && activeEdit.index === index) {
+                    // Render edit view
+                    listItem.innerHTML = `
+                        <input type="text" id="edit-input-${type}" value="${item}" class="admin-item-input">
+                        <div class="admin-item-actions">
+                            <button class="btn-grid btn-primary" data-action="save">Save</button>
+                            <button class="btn-grid btn-secondary" data-action="cancel">Cancel</button>
+                        </div>
+                    `;
+                    const input = listItem.querySelector('input');
+                    setTimeout(() => input?.focus(), 0);
+                    input.addEventListener('keydown', (e) => {
+                         if (e.key === 'Enter') saveItem(type, index);
+                         if (e.key === 'Escape') cancelEdit();
+                    });
+                } else {
+                    // Render display view
+                    listItem.innerHTML = `
+                        <span class="admin-item-name">${item}</span>
+                        <div class="admin-item-actions">
+                            <button class="btn-grid btn-edit-grid" data-action="edit">Edit</button>
+                            <button class="btn-grid btn-delete-grid" data-action="delete">Delete</button>
+                        </div>
+                    `;
+                }
+                container.appendChild(listItem);
+            });
+        }
+
+        function renderEquipmentAdminList() {
+            renderAdminList('admin-equipment-list', equipmentList, 'equipment', 'deleteEquipmentItem');
+        }
+
+        function renderSystemsAdminList() {
+            renderAdminList('admin-systems-list', systemTypes, 'system', 'deleteSystemType');
+        }
+
+        function renderFaultsAdminList() {
+            renderAdminList('admin-faults-list', faultTypes, 'fault', 'deleteFaultType');
+        }
+
+        function renderSectionsAdminList() {
+            const container = document.getElementById('admin-sections-list');
+            container.innerHTML = '';
+            if (sections.length === 0) {
+                container.innerHTML = '<p style="padding: 10px; color: #7f8c8d;">No sections yet.</p>';
+                return;
+            }
+            sections.forEach((section, index) => {
+                const listItem = document.createElement('div');
+                listItem.className = 'admin-list-item';
+
+                if (activeEdit && activeEdit.type === 'section' && activeEdit.index === index) {
+                    listItem.innerHTML = `
+                        <span class="admin-item-name" style="display: flex; align-items: center; gap: 10px;">
+                            <input type="color" id="edit-section-color" value="${section.color}" style="padding: 0; border: none; width: 30px; height: 30px;">
+                            <input type="text" id="edit-input-section" value="${section.name}" class="admin-item-input">
+                        </span>
+                        <div class="admin-item-actions">
+                            <button class="btn-grid btn-primary" data-action="save">Save</button>
+                            <button class="btn-grid btn-secondary" data-action="cancel">Cancel</button>
+                        </div>
+                    `;
+                } else {
+                    listItem.innerHTML = `
+                        <span class="admin-item-name">
+                            <span class="color-indicator" style="background-color: ${section.color}; border: 1px solid #ccc;"></span>
+                            ${section.name}
+                        </span>
+                        <div class="admin-item-actions">
+                            <button class="btn-grid btn-edit-grid" data-action="edit">Edit</button>
+                            <button class="btn-grid btn-delete-grid" data-action="delete">Delete</button>
+                        </div>
+                    `;
+                }
+                container.appendChild(listItem);
+            });
+        }
+
+        function deleteSection(index) {
+            const sectionToDelete = sections[index];
+            if (confirm(`Are you sure you want to delete section "${sectionToDelete.name}"? This will not remove existing bookings with this section, but you won't be able to assign it to new ones.`)) {
+                sections.splice(index, 1);
+                renderSectionsAdminList();
+                populateSectionDropdowns();
+                updateRelationsStats();
+            }
+        }
+
+        function addSection() {
+            const nameInput = document.getElementById('new-section-name');
+            const colorInput = document.getElementById('new-section-color');
+            const name = nameInput.value.trim();
+            const color = colorInput.value;
+
+            if (name && !sections.find(s => s.name.toLowerCase() === name.toLowerCase())) {
+                sections.push({ name, color });
+                sections.sort((a, b) => a.name.localeCompare(b.name));
+                renderSectionsAdminList();
+                populateSectionDropdowns();
+                updateRelationsStats();
+                nameInput.value = '';
+                colorInput.value = '#C7CEEA';
+            } else {
+                alert(name ? 'This section name already exists.' : 'Please enter a section name.');
+            }
+        }
+
+        function updateRelationsGrid() {
+            renderEquipmentSystemRelationsGrid();
+            renderSystemDetailsGrid();
+        }
+
+        function renderEquipmentSystemRelationsGrid() {
+            const gridBody = document.getElementById('equipment-system-relations-grid-body');
+            const searchTerm = document.getElementById('search-relations').value.toLowerCase();
+            const equipmentFilter = document.getElementById('filter-equipment').value;
+
+            const filteredRelations = equipmentSystemRelations.filter(relation => {
+                const equipmentName = (equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === relation.equipment) || relation.equipment);
+                const searchString = `${equipmentName} ${relation.systems.join(' ')}`.toLowerCase();
+                const matchesSearch = !searchTerm || searchString.includes(searchTerm);
+                const matchesEquipment = !equipmentFilter || relation.equipment === equipmentFilter;
+                return matchesSearch && matchesEquipment;
+            });
+
+            if (filteredRelations.length === 0) {
+                gridBody.innerHTML = '<div class="no-relations">No relations found.</div>';
+                return;
+            }
+
+            gridBody.innerHTML = '';
+            filteredRelations.forEach(relation => {
+                const equipmentName = (equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === relation.equipment) || relation.equipment);
+                const row = document.createElement('div');
+                row.className = 'relation-grid-row';
+                row.style.gridTemplateColumns = '1fr 3fr 120px';
+                row.innerHTML = `
+                    <div class="grid-cell"><div class="equipment-badge">${equipmentName}</div></div>
+                    <div class="grid-cell"><div class="systems-list">${relation.systems.map(s => `<span class="system-tag">${s}</span>`).join('')}</div></div>
+                    <div class="grid-cell"><div class="relation-actions-grid">
+                        <button class="btn-grid btn-edit-grid">Edit</button>
+                        <button class="btn-grid btn-delete-grid">Delete</button>
+                    </div></div>
+                `;
+
+                row.querySelector('.btn-edit-grid').addEventListener('click', () => populateBuilderWithEquipmentSystem(relation.equipment));
+                row.querySelector('.btn-delete-grid').addEventListener('click', () => deleteEquipmentSystemRelation(relation.equipment));
+
+                gridBody.appendChild(row);
+            });
+        }
+
+        function renderSystemDetailsGrid() {
+            const gridBody = document.getElementById('system-details-relations-grid-body');
+            const searchTerm = document.getElementById('search-relations').value.toLowerCase();
+            const sectionFilter = document.getElementById('filter-section').value;
+
+            const filteredDetails = systemDetails.filter(detail => {
+                const searchString = `${detail.system} ${detail.section} ${detail.faults.join(' ')}`.toLowerCase();
+                const matchesSearch = !searchTerm || searchString.includes(searchTerm);
+                const matchesSection = !sectionFilter || detail.section === sectionFilter;
+                return matchesSearch && matchesSection;
+            });
+
+            if (filteredDetails.length === 0) {
+                gridBody.innerHTML = '<div class="no-relations">No relations found.</div>';
+                return;
+            }
+
+            gridBody.innerHTML = '';
+            filteredDetails.forEach(detail => {
+                const row = document.createElement('div');
+                row.className = 'relation-grid-row';
+                row.innerHTML = `
+                    <div class="grid-cell"><strong>${detail.system}</strong></div>
+                    <div class="grid-cell"><div class="section-badge" style="background-color: ${getSectionColor(detail.section)}">${detail.section.charAt(0).toUpperCase() + detail.section.slice(1)}</div></div>
+                    <div class="grid-cell"><div class="faults-list">${detail.faults.map(f => `<span class="fault-tag">${f}</span>`).join('')}</div></div>
+                    <div class="grid-cell"><div class="relation-actions-grid">
+                        <button class="btn-grid btn-edit-grid">Edit</button>
+                        <button class="btn-grid btn-delete-grid">Delete</button>
+                    </div></div>
+                `;
+
+                row.querySelector('.btn-edit-grid').addEventListener('click', () => populateBuilderWithSystemDetails(detail.system, detail.section));
+                row.querySelector('.btn-delete-grid').addEventListener('click', () => deleteSystemDetailsRelation(detail.system, detail.section));
+
+                gridBody.appendChild(row);
+            });
+        }
+
+        function deleteEquipmentSystemRelation(equipmentSlug) {
+            const equipmentName = equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === equipmentSlug) || equipmentSlug;
+            if (confirm(`Are you sure you want to delete the equipment-system relation for "${equipmentName}"?`)) {
+                equipmentSystemRelations = equipmentSystemRelations.filter(r => r.equipment !== equipmentSlug);
+                updateRelationsGrid();
+                updateRelationsStats();
+            }
+        }
+
+        function deleteSystemDetailsRelation(systemName, sectionName) {
+            if (confirm(`Are you sure you want to delete the system-details relation for ${systemName} - ${sectionName}?`)) {
+                systemDetails = systemDetails.filter(d => d.system !== systemName || d.section !== sectionName);
+                updateRelationsGrid();
+                updateRelationsStats();
+            }
+        }
+
+        function updateRelationsStats() {
+            document.getElementById('total-relations').textContent = equipmentSystemRelations.length + systemDetails.length;
+            document.getElementById('total-equipment').textContent = equipmentList.length;
+            document.getElementById('total-sections').textContent = sections.length;
+        }
+
+        function updateTimelineView() {
+            timelineView = document.getElementById('timeline-view-select').value;
+
+            const equipmentRows = document.querySelectorAll('.equipment-row');
+            equipmentRows.forEach(row => {
+                const dayShift = row.querySelector('.shift-section[data-shift="day"]');
+                const nightShift = row.querySelector('.shift-section[data-shift="night"]');
+
+                // Reset classes
+                dayShift.classList.remove('shift-hidden', 'shift-full-width');
+                nightShift.classList.remove('shift-hidden', 'shift-full-width');
+
+                if (timelineView === 'day') {
+                    nightShift.classList.add('shift-hidden');
+                    dayShift.classList.add('shift-full-width');
+                } else if (timelineView === 'night') {
+                    dayShift.classList.add('shift-hidden');
+                    nightShift.classList.add('shift-full-width');
+                }
+            });
+
+            // Adjust the main container's class for scrolling behavior
+            const timelineContainer = document.getElementById('tracker').querySelector('.timeline-container');
+            if (timelineView === '24h') {
+                timelineContainer.classList.remove('single-shift-view');
+            } else {
+                timelineContainer.classList.add('single-shift-view');
+            }
+        }
+
+        function updateBuilderPreview() {
+            const relationType = document.getElementById('builder-relation-type').value;
+            const preview = document.getElementById('builder-preview-content');
+
+            if (relationType === 'equipment-to-systems') {
+                const equipment = document.getElementById('builder-equipment').value;
+                const selectedSystems = Array.from(document.querySelectorAll('#builder-form-equipment-to-systems .systems-grid input:checked')).map(cb => cb.value);
+
+                if (!equipment && selectedSystems.length === 0) {
+                    preview.innerHTML = '<p>Select equipment and systems to see preview</p>';
+                    return;
+                }
+                const equipmentName = (equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === equipment) || 'Not selected');
+                preview.innerHTML = `
+                    <div class="preview-item"><span class="preview-label">Equipment:</span> <span class="preview-value">${equipmentName}</span></div>
+                    <div class="preview-item"><span class="preview-label">Systems:</span> <span class="preview-value">${selectedSystems.join(', ') || 'None'}</span></div>
+                `;
+            } else { // system-to-details
+                const system = document.getElementById('builder-system-type').value;
+                const section = document.getElementById('builder-section').value;
+                const selectedFaults = Array.from(document.querySelectorAll('#builder-form-system-to-details .faults-grid input:checked')).map(cb => cb.value);
+
+                if (!system && !section && selectedFaults.length === 0) {
+                    preview.innerHTML = '<p>Select system, section and faults to see preview</p>';
+                    return;
+                }
+                preview.innerHTML = `
+                    <div class="preview-item"><span class="preview-label">System:</span> <span class="preview-value">${system || 'Not selected'}</span></div>
+                    <div class="preview-item"><span class="preview-label">Section:</span> <span class="preview-value">${section || 'Not selected'}</span></div>
+                    <div class="preview-item"><span class="preview-label">Faults:</span> <span class="preview-value">${selectedFaults.join(', ') || 'None'}</span></div>
+                `;
+            }
+        }
+
+
+        // --- NAVIGATION ---
+        function showTab(tabName) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            
+            document.getElementById(tabName)?.classList.add('active');
+            document.querySelector(`.tab[data-tab='${tabName}']`)?.classList.add('active');
+
+            if (tabName === 'meeting') updateMeetingView();
+            if (tabName === 'admin') {
+                updateRelationsGrid();
+                updateRelationsStats();
+            }
+        }
+        
+        function showAdminTab(tabName) {
+            document.querySelectorAll('.admin-view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            
+            document.getElementById(`admin-${tabName}-view`)?.classList.add('active');
+            document.querySelector(`.admin-tab[data-admin-tab='${tabName}']`)?.classList.add('active');
+
+            if (tabName === 'manager') {
+                updateRelationsGrid();
+            }
+        }
+
+
+        // --- DATA MANAGEMENT (CRUD) ---
+        function startEditItem(type, index) {
+            activeEdit = { type, index };
+            renderAllAdminLists();
+        }
+
+        function cancelEdit() {
+            activeEdit = null;
+            renderAllAdminLists();
+        }
+
+        function saveItem(type, index) {
+            if (type === 'section') {
+                const nameInput = document.getElementById('edit-input-section');
+                const colorInput = document.getElementById('edit-section-color');
+                const newName = nameInput.value.trim();
+                const newColor = colorInput.value;
+                const oldName = sections[index].name;
+
+                if (!newName) {
+                    alert('The section name cannot be empty.');
+                    return;
+                }
+
+                if (newName.toLowerCase() !== oldName.toLowerCase() && sections.find(s => s.name.toLowerCase() === newName.toLowerCase())) {
+                    alert('This section name already exists.');
+                    return;
+                }
+
+                sections[index].name = newName;
+                sections[index].color = newColor;
+
+                sections.sort((a, b) => a.name.localeCompare(b.name));
+                activeEdit = null;
+
+                renderAllAdminLists();
+                populateSectionDropdowns();
+                createTimelineGrid('equipment-rows', true);
+                updateMeetingView();
+                return;
+            }
+
+            const input = document.getElementById(`edit-input-${type}`);
+            if (!input) return;
+            const newName = input.value.trim();
+
+            let list, oldName;
+            if (type === 'equipment') { list = equipmentList; } 
+            else if (type === 'system') { list = systemTypes; } 
+            else { list = faultTypes; }
+            oldName = list[index];
+
+            if (!newName) {
+                alert(`The ${type} name cannot be empty.`);
+                return;
+            }
+
+            if (newName.toLowerCase() !== oldName.toLowerCase() && list.find(item => item.toLowerCase() === newName.toLowerCase())) {
+                alert(`This ${type} name already exists.`);
+                return;
+            }
+            
+            if (newName === oldName) {
+                cancelEdit();
+                return;
+            }
+
+            // Perform update
+            if (type === 'equipment') {
+                const oldSlug = oldName.toLowerCase().replace(/\s+/g, '-');
+                const newSlug = newName.toLowerCase().replace(/\s+/g, '-');
+                list[index] = newName;
+                equipmentSystemRelations.forEach(rel => { if (rel.equipment === oldSlug) rel.equipment = newSlug; });
+                bookings.forEach(b => { if (b.equipment === oldSlug) b.equipment = newSlug; });
+            } else if (type === 'system') {
+                list[index] = newName;
+                equipmentSystemRelations.forEach(rel => {
+                    const sysIndex = rel.systems.findIndex(s => s.toLowerCase() === oldName.toLowerCase());
+                    if (sysIndex > -1) rel.systems[sysIndex] = newName;
+                });
+                systemDetails.forEach(det => {
+                    if (det.system.toLowerCase() === oldName.toLowerCase()) {
+                        det.system = newName;
+                    }
+                });
+            } else { // fault
+                list[index] = newName;
+                systemDetails.forEach(det => {
+                    const faultIndex = det.faults.findIndex(f => f.toLowerCase() === oldName.toLowerCase());
+                    if (faultIndex > -1) det.faults[faultIndex] = newName;
+                });
+            }
+            
+            list.sort();
+            activeEdit = null;
+            
+            renderAllAdminLists();
+            populateBuilderGrids();
+            updateRelationsGrid();
+
+            if (type === 'equipment') {
+                populateAllEquipmentDropdowns();
+                createTimelineGrid('equipment-rows', true);
+                updateMeetingView();
+            }
+        }
+
+        // Equipment
+        function addEquipmentItem() {
+            const input = document.getElementById('new-equipment-name');
+            const names = input.value.split(',').map(name => name.trim()).filter(name => name);
+
+            let addedCount = 0;
+            names.forEach(name => {
+                if (name && !equipmentList.find(e => e.toLowerCase() === name.toLowerCase())) {
+                    equipmentList.push(name);
+                    addedCount++;
+                } else {
+                    console.warn(`Skipping duplicate or empty equipment name: "${name}"`);
+                }
+            });
+
+            if (addedCount > 0) {
+                equipmentList.sort();
+                renderEquipmentAdminList();
+                populateAllEquipmentDropdowns();
+                createTimelineGrid('equipment-rows', true);
+                updateMeetingView();
+                updateRelationsStats();
+                alert(`Added ${addedCount} new equipment item(s).`);
+            }
+            input.value = '';
+        }
+
+        function deleteEquipmentItem(index) {
+            const nameToDelete = equipmentList[index];
+            if (confirm(`Are you sure you want to delete "${nameToDelete}"? This will also remove any relations and bookings associated with it.`)) {
+                const slugToDelete = nameToDelete.toLowerCase().replace(/\s+/g, '-');
+                equipmentList.splice(index, 1);
+                equipmentSystemRelations = equipmentSystemRelations.filter(rel => rel.equipment !== slugToDelete);
+                bookings = bookings.filter(b => b.equipment !== slugToDelete);
+                renderEquipmentAdminList();
+                populateAllEquipmentDropdowns();
+                createTimelineGrid('equipment-rows', true);
+                updateMeetingView();
+                updateRelationsGrid();
+                updateRelationsStats();
+            }
+        }
+
+        // System Types
+        function addSystemType() {
+            const input = document.getElementById('new-system-name');
+            const names = input.value.split(',').map(name => name.trim()).filter(name => name);
+
+            let addedCount = 0;
+            names.forEach(name => {
+                if (name && !systemTypes.find(s => s.toLowerCase() === name.toLowerCase())) {
+                    systemTypes.push(name);
+                    addedCount++;
+                } else {
+                    console.warn(`Skipping duplicate or empty system type: "${name}"`);
+                }
+            });
+
+            if (addedCount > 0) {
+                systemTypes.sort();
+                renderSystemsAdminList();
+                populateBuilderGrids();
+                alert(`Added ${addedCount} new system type(s).`);
+            }
+            input.value = '';
+        }
+
+        function deleteSystemType(index) {
+            const nameToDelete = systemTypes[index];
+            if (confirm(`Are you sure you want to delete system type "${nameToDelete}"? It will be removed from all relations.`)) {
+                systemTypes.splice(index, 1);
+
+                // Remove from equipmentSystemRelations
+                equipmentSystemRelations.forEach(rel => {
+                    rel.systems = rel.systems.filter(s => s.toLowerCase() !== nameToDelete.toLowerCase());
+                });
+                equipmentSystemRelations = equipmentSystemRelations.filter(rel => rel.systems.length > 0);
+
+                // Remove from systemDetails
+                systemDetails = systemDetails.filter(d => d.system.toLowerCase() !== nameToDelete.toLowerCase());
+
+                renderSystemsAdminList();
+                populateBuilderGrids();
+                updateRelationsGrid();
+            }
+        }
+
+        // Fault Types
+        function addFaultType() {
+            const input = document.getElementById('new-fault-name');
+            const names = input.value.split(',').map(name => name.trim()).filter(name => name);
+
+            let addedCount = 0;
+            names.forEach(name => {
+                if (name && !faultTypes.find(f => f.toLowerCase() === name.toLowerCase())) {
+                    faultTypes.push(name);
+                    addedCount++;
+                } else {
+                    console.warn(`Skipping duplicate or empty fault type: "${name}"`);
+                }
+            });
+
+            if (addedCount > 0) {
+                faultTypes.sort();
+                renderFaultsAdminList();
+                populateBuilderGrids();
+                alert(`Added ${addedCount} new fault type(s).`);
+            }
+            input.value = '';
+        }
+
+        function deleteFaultType(index) {
+            const nameToDelete = faultTypes[index];
+            if (confirm(`Are you sure you want to delete fault type "${nameToDelete}"? It will be removed from all relations.`)) {
+                faultTypes.splice(index, 1);
+                systemDetails.forEach(det => {
+                    det.faults = det.faults.filter(f => f.toLowerCase() !== nameToDelete.toLowerCase());
+                });
+                renderFaultsAdminList();
+                populateBuilderGrids();
+                updateRelationsGrid();
+            }
+        }
+
+
+        // --- TIME SELECTION ---
+        let isSelecting = false;
+        let selectionStartIndex = -1;
+        let currentEquipment = '';
+
+        function startSelection(e) {
+            if (e.button !== 0) return;
+            const block = e.target.closest('.time-block');
+            if (!block) return;
+            
+            if (block.classList.contains('booked')) {
+                showBookingDetails(block.dataset.bookingId);
+                return;
+            }
+            isSelecting = true;
+            selectionStartIndex = parseInt(block.dataset.index);
+            currentEquipment = block.dataset.equipment;
+            document.querySelectorAll('.time-block.selected').forEach(el => el.classList.remove('selected'));
+            selectedTimeBlocks = [{ element: block, index: selectionStartIndex, equipment: currentEquipment, time: block.dataset.time }];
+            block.classList.add('selected');
+            showSelectionInfo();
+            e.preventDefault();
+        }
+
+        function extendSelection(e) {
+            if (!isSelecting) return;
+            const block = e.target.closest('.time-block');
+            if (!block || block.classList.contains('booked') || block.dataset.equipment !== currentEquipment) return;
+
+            const shiftSection = block.closest('.shift-section');
+            const blocksInSection = Array.from(shiftSection.querySelectorAll('.time-block'));
+            blocksInSection.forEach(el => el.classList.remove('selected'));
+            selectedTimeBlocks = [];
+
+            const startBlock = blocksInSection.find(b => parseInt(b.dataset.index) === selectionStartIndex);
+            if (!startBlock) return;
+            const startIndex = blocksInSection.indexOf(startBlock);
+            const currentIndex = blocksInSection.indexOf(block);
+            const [start, end] = [Math.min(startIndex, currentIndex), Math.max(startIndex, currentIndex)];
+
+            for (let i = start; i <= end; i++) {
+                const b = blocksInSection[i];
+                if (b && !b.classList.contains('booked')) {
+                    b.classList.add('selected');
+                    selectedTimeBlocks.push({ element: b, index: parseInt(b.dataset.index), equipment: currentEquipment, time: b.dataset.time });
+                }
+            }
+            showSelectionInfo();
+        }
+
+        function endSelection() {
+            if (!isSelecting) return;
+            isSelecting = false;
+            if (selectedTimeBlocks.length > 0) openBookingModal();
+            else hideSelectionInfo();
+        }
+
+
+        // --- BOOKING MODAL ---
+        function openBookingModal() {
+            resetBookingForm();
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('booking-modal').style.display = 'block';
+            if (selectedTimeBlocks.length > 0) {
+                const equipment = selectedTimeBlocks[0].equipment;
+                const equipmentSelect = document.getElementById('equipment-select');
+                equipmentSelect.value = equipment;
+                equipmentSelect.disabled = true; // Lock the equipment selection
+                updateModalBasedOnEquipment(equipment);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            document.getElementById('booking-modal').style.display = 'none';
+            document.querySelectorAll('.time-block.selected').forEach(item => item.classList.remove('selected'));
+            selectedTimeBlocks = [];
+            hideSelectionInfo();
+        }
+
+        function selectSystem(element, system) {
+            document.querySelectorAll('.system-icon').forEach(icon => icon.classList.remove('selected'));
+            element.classList.add('selected');
+            selectedSystem = system;
+
+            // Also trigger fault update
+            const section = document.getElementById('section-select').value;
+            if (section) {
+                updateFaultsBasedOnSection(section);
+            }
+        }
+
+        function saveBooking() {
+            const equipment = document.getElementById('equipment-select').value;
+            const section = document.getElementById('section-select').value;
+            const fault = document.getElementById('fault-select').value;
+            if (!equipment || !section || !fault || !selectedSystem) {
+                alert('Please fill in all required fields');
+                return;
+            }
+            selectedTimeBlocks.sort((a, b) => a.time.localeCompare(b.time));
+            const shiftType = selectedTimeBlocks[0].element.closest('.shift-section').querySelector('.shift-header').textContent.includes('Day') ? 'day' : 'night';
+
+            const booking = {
+                id: Date.now().toString(),
+                equipment, system: selectedSystem, section, fault,
+                comments: document.getElementById('comments').value,
+                timeBlocks: selectedTimeBlocks.map(b => ({index: b.index, time: b.time})),
+                startTime: selectedTimeBlocks[0].time,
+                endTime: selectedTimeBlocks[selectedTimeBlocks.length - 1].time,
+                shift: shiftType,
+            };
+            bookings.push(booking);
+            
+            closeModal();
+            renderBookingsOnTracker();
+            if (document.getElementById('meeting').classList.contains('active')) updateMeetingView();
+        }
+
+        function showSectionEquipmentDowntimeSummary(section, equipment, shift) {
+            const bookingsForEquipmentSection = bookings.filter(b => b.section === section && b.equipment === equipment && b.shift === shift);
+            const totalDowntime = bookingsForEquipmentSection.reduce((total, booking) => total + (booking.timeBlocks.length * 5), 0);
+
+            const equipmentName = equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === equipment) || equipment;
+            const sectionName = sections.find(s => s.name === section)?.name || section;
+
+            const modal = document.getElementById('booking-modal');
+            const modalTitle = document.getElementById('booking-modal-title');
+
+            modal.querySelectorAll('.form-group').forEach(el => el.style.display = 'none');
+
+            modalTitle.textContent = `Downtime for: ${equipmentName} - ${sectionName}`;
+
+            let summaryContainer = modal.querySelector('#fault-summary-container');
+            if (!summaryContainer) {
+                summaryContainer = document.createElement('div');
+                summaryContainer.id = 'fault-summary-container';
+                modal.insertBefore(summaryContainer, modal.querySelector('.button-group'));
+            }
+
+            let summaryContent = `
+                <div class="form-group" style="display: block;">
+                    <p>Total for <strong>${equipmentName}</strong> / <strong>${sectionName}</strong> in <strong>${shift} shift</strong>: <strong>${formatDowntime(totalDowntime)}</strong></p>
+                    <p>Bookings (${bookingsForEquipmentSection.length}):</p>
+                    <ul style="font-size: 12px; padding-left: 20px;">
+            `;
+            bookingsForEquipmentSection.forEach(b => {
+                summaryContent += `<li><strong>${formatDowntime(b.timeBlocks.length*5)}</strong>: ${b.system} - ${b.comments || 'No comments'}</li>`
+            })
+            summaryContent += `</ul></div>`;
+            summaryContainer.innerHTML = summaryContent;
+
+            document.getElementById('save-booking-btn').style.display = 'none';
+            document.getElementById('cancel-booking-btn').textContent = 'Close';
+
+            document.getElementById('cancel-booking-btn').onclick = () => {
+                closeModal();
+                // Restore the form for next time
+                modal.querySelectorAll('.form-group').forEach(el => el.style.display = 'block');
+                summaryContainer.innerHTML = '';
+                document.getElementById('save-booking-btn').style.display = 'inline-block';
+                document.getElementById('cancel-booking-btn').textContent = 'Cancel';
+            };
+
+            document.getElementById('modal-overlay').style.display = 'block';
+            modal.style.display = 'block';
+        }
+
+        function updateBooking(bookingId) {
+            const bookingIndex = bookings.findIndex(b => b.id === bookingId);
+            if (bookingIndex === -1) return;
+
+            const equipment = document.getElementById('equipment-select').value;
+            const section = document.getElementById('section-select').value;
+            const fault = document.getElementById('fault-select').value;
+            if (!equipment || !section || !fault || !selectedSystem) {
+                alert('Please fill in all required fields');
+                return;
+            }
+
+            bookings[bookingIndex].equipment = equipment;
+            bookings[bookingIndex].system = selectedSystem;
+            bookings[bookingIndex].section = section;
+            bookings[bookingIndex].fault = fault;
+            bookings[bookingIndex].comments = document.getElementById('comments').value;
+
+            closeModal();
+            renderBookingsOnTracker();
+            if (document.getElementById('meeting').classList.contains('active')) updateMeetingView();
+        }
+
+        function deleteBooking(bookingId) {
+            if (confirm('Are you sure you want to delete this booking?')) {
+                bookings = bookings.filter(b => b.id !== bookingId);
+                closeModal();
+                renderBookingsOnTracker();
+                if (document.getElementById('meeting').classList.contains('active')) updateMeetingView();
+            }
+        }
+
+        function showBookingDetails(bookingId) {
+            const booking = bookings.find(b => b.id === bookingId);
+            if (!booking) return;
+
+            resetBookingForm();
+            activeEdit = { type: 'booking', id: bookingId }; // Set active edit state
+            document.getElementById('booking-modal-title').textContent = 'Edit Booking';
+
+            document.getElementById('equipment-select').value = booking.equipment;
+            updateModalBasedOnEquipment(booking.equipment, booking);
+            
+            // After populating dropdowns, set the correct values
+            setTimeout(() => {
+                document.getElementById('section-select').value = booking.section;
+                document.getElementById('fault-select').value = booking.fault;
+                const systemIcon = document.querySelector(`.system-icon[data-system='${booking.system}']`);
+                if(systemIcon) selectSystem(systemIcon, booking.system);
+            }, 0);
+
+            document.getElementById('comments').value = booking.comments;
+
+            const saveButton = document.getElementById('save-booking-btn');
+            saveButton.textContent = 'Update';
+            saveButton.onclick = () => updateBooking(booking.id);
+
+            const buttonGroup = document.querySelector('.button-group');
+            let deleteButton = document.getElementById('delete-booking-btn');
+            if (!deleteButton) {
+                deleteButton = document.createElement('button');
+                deleteButton.id = 'delete-booking-btn';
+                deleteButton.className = 'btn-danger';
+                deleteButton.textContent = 'Delete';
+                buttonGroup.insertBefore(deleteButton, saveButton);
+            }
+            deleteButton.style.display = 'inline-block';
+            deleteButton.onclick = () => deleteBooking(booking.id);
+            
+            document.getElementById('modal-overlay').style.display = 'block';
+            document.getElementById('booking-modal').style.display = 'block';
+        }
+
+        function resetBookingForm() {
+            activeEdit = null;
+            document.getElementById('booking-modal-title').textContent = 'Add Equipment Booking';
+            const form = document.getElementById('booking-modal');
+            form.querySelectorAll('select, textarea').forEach(el => {
+                el.disabled = false;
+                if(el.tagName !== 'SELECT') el.value = '';
+            });
+            form.querySelector('#equipment-select').value = '';
+            
+            document.querySelectorAll('.system-icon').forEach(icon => icon.style.pointerEvents = 'auto');
+            resetModalFilters();
+            
+            const saveButton = document.getElementById('save-booking-btn');
+            saveButton.textContent = 'Save';
+            saveButton.onclick = saveBooking;
+
+            const deleteButton = document.getElementById('delete-booking-btn');
+            if (deleteButton) {
+                deleteButton.style.display = 'none';
+            }
+
+            document.getElementById('cancel-booking-btn').textContent = 'Cancel';
+        }
+
+
+        // --- MODAL FILTERING ---
+        function updateModalBasedOnEquipment(equipment, bookingToRestore = null) {
+            if (!equipment) {
+                resetModalFilters();
+                return;
+            }
+
+            // 1. Find the equipment-system relation
+            const eqSystemRelation = equipmentSystemRelations.find(r => r.equipment === equipment);
+            if (!eqSystemRelation || eqSystemRelation.systems.length === 0) {
+                resetModalFilters();
+                return;
+            }
+            const associatedSystems = eqSystemRelation.systems;
+
+            // 2. For each system, find its details to populate sections
+            const allSections = new Set();
+            associatedSystems.forEach(systemName => {
+                const details = systemDetails.filter(d => d.system === systemName);
+                details.forEach(detail => {
+                    if (detail) {
+                        allSections.add(detail.section);
+                    }
+                });
+            });
+
+            // 3. Aggregate and de-duplicate
+            const uniqueSystems = [...new Set(associatedSystems)];
+            const uniqueSections = [...allSections];
+
+            updateSystemIcons(uniqueSystems, bookingToRestore);
+            updateSelectWithOptions('section-select', uniqueSections, 'Section');
+            // Reset faults, as they now depend on the section
+            updateSelectWithOptions('fault-select', [], 'Fault');
+        }
+
+        function updateSystemIcons(systems, bookingToRestore) {
+            const container = document.querySelector('.system-icons');
+            container.innerHTML = '';
+            selectedSystem = '';
+            if (systems.length === 0) return;
+
+            // Determine which system should be selected by default
+            let defaultSystem = bookingToRestore ? bookingToRestore.system : systems[0].toLowerCase().replace(/\s+/g, '-');
+            
+            systems.forEach(system => {
+                const systemKey = system.toLowerCase().replace(/\s+/g, '-');
+                const icon = document.createElement('div');
+                icon.className = 'system-icon';
+                icon.dataset.system = systemKey;
+                icon.textContent = system; // Use full name
+                
+                if (systemKey === defaultSystem) {
+                    icon.classList.add('selected');
+                    selectedSystem = systemKey;
+                }
+                container.appendChild(icon);
+            });
+        }
+        
+        function updateSelectWithOptions(selectId, options, placeholder) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = `<option value="">Select ${placeholder}</option>`;
+            options.forEach(option => {
+                const el = document.createElement('option');
+                const value = option.toLowerCase().replace(/\s+/g, '-');
+                el.value = value;
+                el.textContent = option.charAt(0).toUpperCase() + option.slice(1);
+                select.appendChild(el);
+            });
+        }
+        function updateFaultsBasedOnSection(sectionName) {
+            const equipment = document.getElementById('equipment-select').value;
+            const selectedSystem = document.querySelector('.system-icon.selected')?.dataset.system;
+
+            if (!equipment || !selectedSystem || !sectionName) {
+                updateSelectWithOptions('fault-select', [], 'Fault');
+                return;
+            }
+
+            // Find all systems associated with the equipment
+            const eqSystemRelation = equipmentSystemRelations.find(r => r.equipment === equipment);
+            if (!eqSystemRelation) return;
+
+            // Find all faults for the selected section across all systems of the equipment
+            const relevantFaults = new Set();
+            eqSystemRelation.systems.forEach(systemName => {
+                const detail = systemDetails.find(d => d.system === systemName && d.section === sectionName);
+                if (detail) {
+                    detail.faults.forEach(fault => relevantFaults.add(fault));
+                }
+            });
+
+            updateSelectWithOptions('fault-select', Array.from(relevantFaults), 'Fault');
+        }
+        
+        function resetModalFilters() {
+            document.querySelector('.system-icons').innerHTML = '<p style="color: #7f8c8d; font-size: 12px;">Select equipment to see options.</p>';
+            selectedSystem = '';
+            updateSelectWithOptions('section-select', [], 'Section');
+            updateSelectWithOptions('fault-select', [], 'Fault');
+        }
+
+
+        // --- RELATIONS BUILDER & MANAGER ---
+        function populateBuilderSystemTypeDropdown() {
+            const select = document.getElementById('builder-system-type');
+            if (!select) return;
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">Select System Type</option>';
+
+            systemTypes.sort().forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                select.appendChild(option);
+            });
+            if (Array.from(select.options).some(o => o.value === currentValue)) {
+                select.value = currentValue;
+            }
+        }
+
+        function switchBuilderForm() {
+            const type = document.getElementById('builder-relation-type').value;
+            const formEqToSys = document.getElementById('builder-form-equipment-to-systems');
+            const formSysToDet = document.getElementById('builder-form-system-to-details');
+            if (type === 'equipment-to-systems') {
+                formEqToSys.style.display = 'block';
+                formSysToDet.style.display = 'none';
+            } else {
+                formEqToSys.style.display = 'none';
+                formSysToDet.style.display = 'block';
+            }
+            clearBuilder();
+        }
+
+        function saveBuilderRelation() {
+            const relationType = document.getElementById('builder-relation-type').value;
+            if (relationType === 'equipment-to-systems') {
+                saveEquipmentSystemRelation();
+            } else {
+                saveSystemDetailsRelation();
+            }
+        }
+
+        function saveEquipmentSystemRelation() {
+            const equipmentEl = document.getElementById('builder-equipment');
+            const equipment = equipmentEl.value;
+            const selectedSystems = Array.from(document.querySelectorAll('#builder-form-equipment-to-systems .systems-grid input:checked')).map(cb => cb.value);
+
+            if (!equipment || selectedSystems.length === 0) {
+                alert('Please select an equipment and at least one system.');
+                return;
+            }
+
+            const existingRelation = equipmentSystemRelations.find(r => r.equipment === equipment);
+
+            if (existingRelation) {
+                existingRelation.systems = selectedSystems;
+            } else {
+                equipmentSystemRelations.push({ equipment, systems: selectedSystems });
+            }
+
+            alert('Equipment ➞ Systems relation saved successfully!');
+            clearBuilder();
+            updateRelationsGrid();
+            updateRelationsStats();
+            showAdminTab('manager');
+        }
+
+        function saveSystemDetailsRelation() {
+            const systemEl = document.getElementById('builder-system-type');
+            const system = systemEl.value;
+            const section = document.getElementById('builder-section').value;
+            const selectedFaults = Array.from(document.querySelectorAll('#builder-form-system-to-details .faults-grid input:checked')).map(cb => cb.value);
+
+            if (!system || !section || selectedFaults.length === 0) {
+                alert('Please select a system, a section, and at least one fault.');
+                return;
+            }
+
+            const existingDetailsIndex = systemDetails.findIndex(d => d.system === system && d.section === section);
+
+            if (existingDetailsIndex !== -1) {
+                systemDetails[existingDetailsIndex].faults = selectedFaults;
+            } else {
+                systemDetails.push({ system, section, faults: selectedFaults });
+            }
+
+            alert('System ➞ Details relation saved successfully!');
+            clearBuilder();
+            updateRelationsGrid();
+            updateRelationsStats();
+            showAdminTab('manager');
+        }
+
+        function clearBuilder() {
+            document.getElementById('builder-equipment').disabled = false;
+            document.getElementById('builder-system-type').disabled = false;
+            document.getElementById('builder-section').disabled = false;
+
+            document.getElementById('builder-equipment').value = '';
+            document.getElementById('builder-system-type').value = '';
+            document.getElementById('builder-section').value = '';
+            document.querySelectorAll('.systems-grid input, .faults-grid input').forEach(cb => cb.checked = false);
+
+            updateBuilderPreview();
+        }
+
+        function populateBuilderWithEquipmentSystem(equipmentSlug) {
+            const relation = equipmentSystemRelations.find(r => r.equipment === equipmentSlug);
+            if (!relation) return;
+
+            document.getElementById('builder-relation-type').value = 'equipment-to-systems';
+            switchBuilderForm();
+
+            document.getElementById('builder-equipment').value = relation.equipment;
+            document.querySelectorAll('#builder-form-equipment-to-systems .systems-grid input').forEach(cb => cb.checked = false);
+            relation.systems.forEach(sys => {
+                const cb = document.querySelector(`#builder-form-equipment-to-systems .systems-grid input[value="${sys}"]`);
+                if(cb) cb.checked = true;
+            });
+
+            document.getElementById('builder-equipment').disabled = true;
+            updateBuilderPreview();
+            showAdminTab('builder');
+        }
+
+        function populateBuilderWithSystemDetails(systemName, sectionName) {
+            const detail = systemDetails.find(d => d.system === systemName && d.section === sectionName);
+            if (!detail) return;
+
+            document.getElementById('builder-relation-type').value = 'system-to-details';
+            switchBuilderForm();
+
+            document.getElementById('builder-system-type').value = detail.system;
+            document.getElementById('builder-section').value = detail.section;
+            document.querySelectorAll('#builder-form-system-to-details .faults-grid input').forEach(cb => cb.checked = false);
+            detail.faults.forEach(f => {
+                const cb = document.querySelector(`#builder-form-system-to-details .faults-grid input[value="${f}"]`);
+                if(cb) cb.checked = true;
+            });
+
+            document.getElementById('builder-system-type').disabled = true;
+            document.getElementById('builder-section').disabled = true;
+            updateBuilderPreview();
+            showAdminTab('builder');
+        }
+
+        function editRelationGrid(relationId) {
+            // This function is now obsolete and will be replaced by edit buttons on the new grids
+            // that call populateBuilderWithEquipmentSystem or populateBuilderWithSystemDetails.
+            console.warn("editRelationGrid is obsolete.");
+        }
+
+        function deleteRelationGrid(relationId) {
+            // This function is now obsolete and will be replaced by delete buttons on the new grids.
+            console.warn("deleteRelationGrid is obsolete.");
+        }
+
+        function addNewRelation() {
+            clearBuilder();
+            showAdminTab('builder');
+        }
+
+        function addCustomSystem() {
+            const input = document.getElementById('custom-system');
+            const newSystem = addSystemType(); // Re-uses the main add function
+            if (newSystem) {
+                const checkbox = document.querySelector(`.systems-grid input[value="${newSystem}"]`);
+                if (checkbox) checkbox.checked = true;
+                updateBuilderPreview();
+            }
+            input.value = '';
+        }
+
+        function addCustomFault() {
+            const input = document.getElementById('custom-fault');
+            const newFault = addFaultType(); // Re-uses the main add function
+            if (newFault) {
+                const checkbox = document.querySelector(`.faults-grid input[value="${newFault}"]`);
+                if (checkbox) checkbox.checked = true;
+                updateBuilderPreview();
+            }
+            input.value = '';
+        }
+
+        function exportData() {
+            const dataToExport = { equipmentList, systemTypes, faultTypes, equipmentSystemRelations, systemDetails, sections, bookings };
+            const dataStr = JSON.stringify(dataToExport, null, 2);
+            const blob = new Blob([dataStr], {type: 'application/json'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'equipment-utilization-data.json';
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        if (confirm("This will replace all current data. Are you sure?")) {
+                            applyData(data);
+                            alert('Data imported successfully!');
+                        }
+                    } catch (error) { alert('Error reading file: ' + error.message); }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+
+        // --- MEETING VIEW & EXPORT ---
+        function updateMeetingView() {
+            let meetingTimelineContainer = document.getElementById('meeting-timeline');
+            meetingTimelineContainer.innerHTML = ''; // Clear previous content
+
+            const equipmentRowsContainer = document.createElement('div');
+            equipmentRowsContainer.id = 'meeting-equipment-rows';
+            equipmentRowsContainer.className = 'equipment-rows';
+            meetingTimelineContainer.appendChild(equipmentRowsContainer);
+
+            createTimelineGrid('meeting-equipment-rows', false);
+            
+            const meetingGrid = document.getElementById('meeting-equipment-rows');
+            
+            const noBookingsMessage = meetingTimelineContainer.querySelector('.no-bookings-message');
+            if(noBookingsMessage) noBookingsMessage.remove();
+
+            if (bookings.length === 0) {
+                const noBookings = document.createElement('p');
+                noBookings.className = 'no-bookings-message';
+                noBookings.style.textAlign = 'center';
+                noBookings.style.padding = '20px';
+                noBookings.textContent = 'No bookings to display.';
+                meetingTimelineContainer.insertBefore(noBookings, meetingGrid);
+                return;
+            }
+        }
+        
+        function renderBookingSummary(booking, timeBlocksContainer) {
+            const blockIndices = booking.timeBlocks.map(b => b.index);
+            if (blockIndices.length === 0) return;
+            const startIndex = Math.min(...blockIndices);
+            const duration = Math.max(...blockIndices) - startIndex + 1;
+            const summaryEl = document.createElement('div');
+            summaryEl.className = 'booking-summary';
+
+            const blockWidth = timeBlocksContainer.querySelector('.time-block')?.offsetWidth || 6;
+
+            summaryEl.style.left = `${startIndex * blockWidth}px`;
+            summaryEl.style.width = `${duration * blockWidth}px`;
+            summaryEl.style.backgroundColor = getSectionColor(booking.section);
+            summaryEl.dataset.bookingId = booking.id;
+            summaryEl.dataset.fault = booking.fault;
+
+            const sectionTitle = booking.section.charAt(0).toUpperCase() + booking.section.slice(1);
+            const downtimeMinutes = booking.timeBlocks.length * 5;
+            const formattedDowntime = formatDowntime(downtimeMinutes);
+            summaryEl.innerHTML = `<div class="booking-summary-title">${sectionTitle} - <strong>${formattedDowntime}</strong></div><div>${booking.comments || ''}</div>`;
+
+            const equipmentName = equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === booking.equipment) || booking.equipment;
+            summaryEl.title = `Equipment: ${equipmentName}\nSystem: ${booking.system}\nSection: ${booking.section}\nFault: ${booking.fault}\nTime: ${booking.startTime}-${getCalculatedEndTime(booking.endTime)}\nDowntime: ${formattedDowntime}\nComments: ${booking.comments || 'None'}`;
+
+            summaryEl.addEventListener('click', (event) => {
+                event.stopPropagation();
+                showSectionEquipmentDowntimeSummary(booking.section, booking.equipment, booking.shift);
+            });
+            timeBlocksContainer.appendChild(summaryEl);
+        }
+
+        function exportMeetingViewAsTxt() {
+            if (bookings.length === 0) {
+                alert('No bookings to export.');
+                return;
+            }
+            const sortedBookings = [...bookings].sort((a, b) => a.startTime.localeCompare(b.startTime));
+            const totalDowntime = bookings.reduce((total, booking) => total + (booking.timeBlocks.length * 5), 0);
+
+            let textContent = "Morning Meeting Overview\n";
+            textContent += `Total Downtime: ${formatDowntime(totalDowntime)}\n\n`;
+
+            sortedBookings.forEach((booking, i) => {
+                const equipmentName = equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === booking.equipment) || booking.equipment;
+                const downtimeMinutes = booking.timeBlocks.length * 5;
+                const formattedDowntime = formatDowntime(downtimeMinutes);
+                textContent += `Booking #${i + 1}: ${equipmentName} - ${formattedDowntime}\n`;
+                textContent += `Time: ${booking.startTime} to ${getCalculatedEndTime(booking.endTime)}\n`;
+                textContent += `System: ${booking.system}\nResponsible: ${booking.section}\nFault: ${booking.fault}\nComments: ${booking.comments || 'None'}\n\n`;
+            });
+            const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `meeting-overview-${new Date().toISOString().split('T')[0]}.txt`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
+        function clearAllBookings() {
+            if (bookings.length === 0 || !confirm('Are you sure you want to clear all bookings? This cannot be undone.')) return;
+            bookings = [];
+            createTimelineGrid('equipment-rows', true);
+            updateMeetingView();
+            alert('All bookings have been cleared.');
+        }
+
+
+        // --- UTILITY & HELPER FUNCTIONS ---
+        function showSelectionInfo() {
+            if (selectedTimeBlocks.length === 0) return;
+            const sortedBlocks = [...selectedTimeBlocks].sort((a, b) => a.time.localeCompare(b.time));
+            const equipmentName = equipmentList.find(e => e.toLowerCase().replace(/\s+/g, '-') === currentEquipment) || currentEquipment;
+            document.getElementById('selected-equipment').textContent = equipmentName;
+            document.getElementById('start-time').textContent = sortedBlocks[0].time;
+            document.getElementById('end-time').textContent = getCalculatedEndTime(sortedBlocks[sortedBlocks.length - 1].time);
+            document.getElementById('selection-info').style.display = 'block';
+        }
+
+        function hideSelectionInfo() {
+            document.getElementById('selection-info').style.display = 'none';
+        }
+
+        function getSectionColor(sectionName) {
+            const section = sections.find(s => s.name === sectionName);
+            return section ? section.color : '#ddd';
+        }
+
+        function formatDowntime(totalMinutes) {
+            if (totalMinutes === 0) return '00:00';
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            const formattedHours = String(hours).padStart(2, '0');
+            const formattedMinutes = String(minutes).padStart(2, '0');
+            return `${formattedHours}:${formattedMinutes}`;
+        }
+
+        function getCalculatedEndTime(timeStr) {
+            if (!timeStr) return '';
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            const end = new Date(0, 0, 0, hours, minutes + 5);
+            return `${end.getHours().toString().padStart(2, '0')}:${end.getMinutes().toString().padStart(2, '0')}`;
+        }
+        
+        function applyData(data) {
+            equipmentList = data.equipmentList || [];
+            systemTypes = data.systemTypes || [];
+            faultTypes = data.faultTypes || [];
+            equipmentSystemRelations = data.equipmentSystemRelations || [];
+            systemDetails = data.systemDetails || [];
+            sections = data.sections || [];
+            bookings = data.bookings || [];
+            
+            // Re-render everything
+            createTimelineGrid('equipment-rows', true);
+            populateAllEquipmentDropdowns();
+            populateSectionDropdowns();
+            populateBuilderGrids();
+            renderAllAdminLists();
+            updateRelationsGrid();
+            updateRelationsStats();
+            updateMeetingView();
+        }
+
+    </script>
+</body>
+</html>
